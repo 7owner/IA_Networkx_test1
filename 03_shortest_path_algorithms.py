@@ -405,53 +405,126 @@ def build_whiteboard_graph_2() -> Tuple[SimpleGraph, Dict[Node, Tuple[float, flo
     On ajoute aussi une arête diagonale (comme sur le tableau) avec coût 4
     pour illustrer qu'on peut avoir des coûts différents.
     """
-    g = SimpleGraph(directed=False)
-
-    width, height = 4, 4
-    nodes = [(x, y) for y in range(height) for x in range(width)]
-
-    # "Murs" (arêtes bloquées) — version pratique inspirée du dessin.
-    # Chaque mur est un couple de noeuds (non orienté).
-    blocked: set[frozenset[Tuple[int, int]]] = set()
-
-    def block(a: Tuple[int, int], b: Tuple[int, int]) -> None:
-        blocked.add(frozenset({a, b}))
-
-    # Mur horizontal en haut du "rectangle de droite" (empêche de passer tout droit depuis (1,1))
-    block((1, 1), (2, 1))
-    block((2, 1), (3, 1))
-
-    # Mur vertical au milieu (oblige souvent à descendre avant de traverser)
-    block((2, 1), (2, 2))
-    block((2, 2), (2, 3))
-
-    def is_blocked(a: Tuple[int, int], b: Tuple[int, int]) -> bool:
-        return frozenset({a, b}) in blocked
-
-    # Connexions 4-voisins (coût 1)
-    for (x, y) in nodes:
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            nx, ny = x + dx, y + dy
-            if not (0 <= nx < width and 0 <= ny < height):
-                continue
-            a, b = (x, y), (nx, ny)
-            if is_blocked(a, b):
-                continue
-            # Pour éviter d'ajouter 2 fois dans un graphe non orienté, on ajoute seulement si a < b
-            if a < b:
-                g.add_edge(a, b, 1.0)
-
-    # Diagonale "comme sur le tableau" (coût 4)
-    g.add_edge((1, 1), (3, 3), 4.0)
-
-    # Positions pour plot : on inverse y pour que 0 soit en haut (comme sur le tableau)
-    pos: Dict[Node, Tuple[float, float]] = {(x, y): (float(x), float(-y)) for (x, y) in nodes}
-
+    g, pos = build_grid_graph(
+        width=4,
+        height=4,
+        blocked_cells=set(),
+        blocked_edges={
+            frozenset({(1, 1), (2, 1)}),
+            frozenset({(2, 1), (3, 1)}),
+            frozenset({(2, 1), (2, 2)}),
+            frozenset({(2, 2), (2, 3)}),
+        },
+        diagonal_edges=[((1, 1), (3, 3), 4.0)],
+    )
     start, goal = (0, 0), (3, 3)
     return g, pos, start, goal
 
 
-def _demo() -> None:
+def build_grid_graph(
+    *,
+    width: int,
+    height: int,
+    blocked_cells: set[Tuple[int, int]],
+    blocked_edges: set[frozenset[Tuple[int, int]]],
+    diagonal_edges: Sequence[Tuple[Tuple[int, int], Tuple[int, int], float]] = (),
+) -> Tuple[SimpleGraph, Dict[Node, Tuple[float, float]]]:
+    """
+    Construit un graphe de grille (x=0..width-1, y=0..height-1).
+
+    - Noeud = (x, y)
+    - Arête = 4-voisins (haut/bas/gauche/droite), coût = 1
+    - blocked_cells : cases interdites (on ne peut pas marcher dessus)
+    - blocked_edges : "murs" entre 2 cases adjacentes (connexion interdite)
+    - diagonal_edges : arêtes supplémentaires (u, v, coût)
+    """
+    g = SimpleGraph(directed=False)
+    nodes = [(x, y) for y in range(height) for x in range(width) if (x, y) not in blocked_cells]
+
+    def in_bounds(cell: Tuple[int, int]) -> bool:
+        (x, y) = cell
+        return 0 <= x < width and 0 <= y < height
+
+    def is_blocked_edge(a: Tuple[int, int], b: Tuple[int, int]) -> bool:
+        return frozenset({a, b}) in blocked_edges
+
+    # Connexions 4-voisins (coût 1)
+    for (x, y) in nodes:
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nxt = (x + dx, y + dy)
+            if not in_bounds(nxt):
+                continue
+            if nxt in blocked_cells:
+                continue
+            if is_blocked_edge((x, y), nxt):
+                continue
+            a, b = (x, y), nxt
+            # Pour éviter d'ajouter 2 fois dans un graphe non orienté, on ajoute seulement si a < b
+            if a < b:
+                g.add_edge(a, b, 1.0)
+
+    # Arêtes diagonales / extras
+    for u, v, cost in diagonal_edges:
+        if not (in_bounds(u) and in_bounds(v)):
+            continue
+        if u in blocked_cells or v in blocked_cells:
+            continue
+        g.add_edge(u, v, float(cost))
+
+    # Positions pour plot : on inverse y pour que 0 soit en haut (comme sur le tableau)
+    pos: Dict[Node, Tuple[float, float]] = {(x, y): (float(x), float(-y)) for (x, y) in nodes}
+    return g, pos
+
+
+def parse_cell(text: str) -> Tuple[int, int]:
+    """
+    Parse une cellule 'x,y' -> (x, y)
+    Exemple: '2,3'
+    """
+    parts = [p.strip() for p in text.split(",")]
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError("Format attendu: x,y (ex: 2,3)")
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError as e:
+        raise argparse.ArgumentTypeError("x et y doivent être des entiers (ex: 2,3)") from e
+
+
+def parse_cells_list(text: str) -> set[Tuple[int, int]]:
+    """
+    Parse une liste 'x1,y1;x2,y2;...' -> set((x,y), ...)
+    Exemple: '1,2;2,2;2,3'
+    """
+    text = text.strip()
+    if not text:
+        return set()
+    return {parse_cell(item.strip()) for item in text.split(";") if item.strip()}
+
+
+def parse_edges_list(text: str) -> set[frozenset[Tuple[int, int]]]:
+    """
+    Parse une liste d'arêtes bloquées 'x1,y1-x2,y2;...' -> set(frozenset({a,b}), ...)
+    Exemple: '1,1-2,1;2,1-3,1'
+    """
+    text = text.strip()
+    if not text:
+        return set()
+
+    blocked: set[frozenset[Tuple[int, int]]] = set()
+    for item in text.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        if "-" not in item:
+            raise argparse.ArgumentTypeError("Format attendu: x1,y1-x2,y2 (ex: 1,1-2,1)")
+        a_txt, b_txt = [p.strip() for p in item.split("-", 1)]
+        a = parse_cell(a_txt)
+        b = parse_cell(b_txt)
+        blocked.add(frozenset({a, b}))
+    return blocked
+
+
+def _demo(args: argparse.Namespace) -> None:
     # ------------------------------------------------------------
     # Mise en pratique : "Plus court chemin 1" (ta photo)
     # ------------------------------------------------------------
@@ -492,7 +565,24 @@ def _demo() -> None:
     # Mise en pratique : "Plus court chemin 2" (ta photo, A*)
     # ------------------------------------------------------------
     print("\n=== PRATIQUE : Plus court chemin 2 (photo, A*) ===")
-    g_img2, pos_img2, start2, goal2 = build_whiteboard_graph_2()
+    if args.grid2_custom:
+        blocked_cells = parse_cells_list(args.grid2_blocked_cells)
+        blocked_edges = parse_edges_list(args.grid2_blocked_edges)
+        diagonal_edges: List[Tuple[Tuple[int, int], Tuple[int, int], float]] = []
+        if not args.grid2_no_diagonal:
+            # Par défaut, on garde la diagonale comme dans l'exemple du tableau.
+            diagonal_edges.append(((1, 1), (3, 3), 4.0))
+        g_img2, pos_img2 = build_grid_graph(
+            width=args.grid2_width,
+            height=args.grid2_height,
+            blocked_cells=blocked_cells,
+            blocked_edges=blocked_edges,
+            diagonal_edges=diagonal_edges,
+        )
+        start2 = parse_cell(args.grid2_start)
+        goal2 = parse_cell(args.grid2_goal)
+    else:
+        g_img2, pos_img2, start2, goal2 = build_whiteboard_graph_2()
 
     def manhattan_grid(u: Node, v: Node) -> float:
         (x1, y1) = u  # type: ignore[misc]
@@ -588,10 +678,52 @@ if __name__ == "__main__":
         action="store_true",
         help="N'affiche pas de fenêtres matplotlib (utile sur serveur/headless).",
     )
+    parser.add_argument(
+        "--grid2-custom",
+        action="store_true",
+        help="Active une grille personnalisée pour la partie 'image 2' (A*).",
+    )
+    parser.add_argument(
+        "--grid2-width",
+        type=int,
+        default=4,
+        help="Largeur de la grille (par défaut: 4).",
+    )
+    parser.add_argument(
+        "--grid2-height",
+        type=int,
+        default=4,
+        help="Hauteur de la grille (par défaut: 4).",
+    )
+    parser.add_argument(
+        "--grid2-start",
+        default="0,0",
+        help="Cellule START au format x,y (par défaut: 0,0).",
+    )
+    parser.add_argument(
+        "--grid2-goal",
+        default="3,3",
+        help="Cellule GOAL au format x,y (par défaut: 3,3).",
+    )
+    parser.add_argument(
+        "--grid2-blocked-cells",
+        default="",
+        help="Cases obstacles 'x,y;x,y;...' (ex: '1,2;2,2').",
+    )
+    parser.add_argument(
+        "--grid2-blocked-edges",
+        default="",
+        help="Murs (arêtes bloquées) 'x1,y1-x2,y2;...' (ex: '1,1-2,1;2,1-3,1').",
+    )
+    parser.add_argument(
+        "--grid2-no-diagonal",
+        action="store_true",
+        help="Désactive l'arête diagonale de l'exemple (si tu veux uniquement du 4-voisins).",
+    )
     args = parser.parse_args()
 
     # Si l'utilisateur ne veut pas de plots, on "neutralise" plot_graph
     if args.no_plots:
         globals()["plot_graph"] = lambda *_a, **_k: None  # type: ignore
 
-    _demo()
+    _demo(args)
