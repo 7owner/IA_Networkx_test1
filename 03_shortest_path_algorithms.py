@@ -246,6 +246,7 @@ def plot_graph(
     highlight_path: Optional[Sequence[Node]] = None,
     start: Optional[Node] = None,
     goal: Optional[Node] = None,
+    show_node_labels: bool = True,
 ) -> None:
     """
     Trace le graphe avec matplotlib (sans NetworkX).
@@ -323,14 +324,23 @@ def plot_graph(
     plt.scatter(xs, ys, s=900, c="#4C78A8", edgecolors="black", linewidths=1.5, zorder=4)
 
     # 3) Labels des noeuds (+ start/goal)
-    for n in graph.nodes():
-        x, y = pos[n]
-        label = str(n)
-        if start is not None and n == start:
-            label = f"{n}\nSTART"
-        if goal is not None and n == goal:
-            label = f"{n}\nGOAL"
-        plt.text(x, y, label, ha="center", va="center", color="white", fontsize=11, zorder=5)
+    if show_node_labels:
+        for n in graph.nodes():
+            x, y = pos[n]
+            label = str(n)
+            if start is not None and n == start:
+                label = f"{n}\nSTART"
+            if goal is not None and n == goal:
+                label = f"{n}\nGOAL"
+            plt.text(x, y, label, ha="center", va="center", color="white", fontsize=11, zorder=5)
+    else:
+        # Mode "léger" : on n'affiche que START et GOAL.
+        if start is not None:
+            x, y = pos[start]
+            plt.text(x, y, "START", ha="center", va="center", color="white", fontsize=12, zorder=5)
+        if goal is not None:
+            x, y = pos[goal]
+            plt.text(x, y, "GOAL", ha="center", va="center", color="white", fontsize=12, zorder=5)
 
     plt.tight_layout()
     plt.show()
@@ -383,6 +393,64 @@ def build_whiteboard_graph_1() -> Tuple[SimpleGraph, Dict[Node, Tuple[float, flo
     return g, pos, start, goal
 
 
+def build_whiteboard_graph_2() -> Tuple[SimpleGraph, Dict[Node, Tuple[float, float]], Node, Node]:
+    """
+    Graphe "Plus court chemin 2" (repris de ta photo IA_court_chemin_2.jpg).
+
+    La photo montre une grille 4x4 (coordonnées 0..3 en x et 0..3 en y) avec des "murs"
+    (certaines connexions sont interdites). On modélise ça comme un graphe :
+      - noeud = (x, y)
+      - arête = mouvement haut/bas/gauche/droite (coût = 1)
+
+    On ajoute aussi une arête diagonale (comme sur le tableau) avec coût 4
+    pour illustrer qu'on peut avoir des coûts différents.
+    """
+    g = SimpleGraph(directed=False)
+
+    width, height = 4, 4
+    nodes = [(x, y) for y in range(height) for x in range(width)]
+
+    # "Murs" (arêtes bloquées) — version pratique inspirée du dessin.
+    # Chaque mur est un couple de noeuds (non orienté).
+    blocked: set[frozenset[Tuple[int, int]]] = set()
+
+    def block(a: Tuple[int, int], b: Tuple[int, int]) -> None:
+        blocked.add(frozenset({a, b}))
+
+    # Mur horizontal en haut du "rectangle de droite" (empêche de passer tout droit depuis (1,1))
+    block((1, 1), (2, 1))
+    block((2, 1), (3, 1))
+
+    # Mur vertical au milieu (oblige souvent à descendre avant de traverser)
+    block((2, 1), (2, 2))
+    block((2, 2), (2, 3))
+
+    def is_blocked(a: Tuple[int, int], b: Tuple[int, int]) -> bool:
+        return frozenset({a, b}) in blocked
+
+    # Connexions 4-voisins (coût 1)
+    for (x, y) in nodes:
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if not (0 <= nx < width and 0 <= ny < height):
+                continue
+            a, b = (x, y), (nx, ny)
+            if is_blocked(a, b):
+                continue
+            # Pour éviter d'ajouter 2 fois dans un graphe non orienté, on ajoute seulement si a < b
+            if a < b:
+                g.add_edge(a, b, 1.0)
+
+    # Diagonale "comme sur le tableau" (coût 4)
+    g.add_edge((1, 1), (3, 3), 4.0)
+
+    # Positions pour plot : on inverse y pour que 0 soit en haut (comme sur le tableau)
+    pos: Dict[Node, Tuple[float, float]] = {(x, y): (float(x), float(-y)) for (x, y) in nodes}
+
+    start, goal = (0, 0), (3, 3)
+    return g, pos, start, goal
+
+
 def _demo() -> None:
     # ------------------------------------------------------------
     # Mise en pratique : "Plus court chemin 1" (ta photo)
@@ -418,6 +486,39 @@ def _demo() -> None:
         highlight_path=path_d,
         start=start,
         goal=goal,
+    )
+
+    # ------------------------------------------------------------
+    # Mise en pratique : "Plus court chemin 2" (ta photo, A*)
+    # ------------------------------------------------------------
+    print("\n=== PRATIQUE : Plus court chemin 2 (photo, A*) ===")
+    g_img2, pos_img2, start2, goal2 = build_whiteboard_graph_2()
+
+    def manhattan_grid(u: Node, v: Node) -> float:
+        (x1, y1) = u  # type: ignore[misc]
+        (x2, y2) = v  # type: ignore[misc]
+        return float(abs(x1 - x2) + abs(y1 - y2))
+
+    dist2, path2 = a_star_shortest_path(g_img2, start2, goal2, heuristic=manhattan_grid)
+    print(f"A*: distance {start2} -> {goal2} =", dist2)
+    print(f"A*: chemin   {start2} -> {goal2} =", path2)
+
+    plot_graph(
+        g_img2,
+        pos_img2,
+        title="Plus court chemin 2 — Grille (murs = arêtes absentes)",
+        start=start2,
+        goal=goal2,
+        show_node_labels=False,
+    )
+    plot_graph(
+        g_img2,
+        pos_img2,
+        title=f"Plus court chemin 2 — A* (coût={dist2:g})",
+        highlight_path=path2,
+        start=start2,
+        goal=goal2,
+        show_node_labels=False,
     )
 
     # ------------------------------------------------------------

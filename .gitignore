@@ -1,0 +1,7 @@
+# Python bytecode / caches
+__pycache__/
+*.pyc
+
+# Local image crops/zooms created during exploration
+_crop*.png
+_zoom*.png
