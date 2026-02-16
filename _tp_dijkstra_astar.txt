@@ -1,0 +1,143 @@
+TP1 — Robotique : Résoudre un labyrinthe avec A*
+Quang-Trung Luu
+quang-trung.luu@universite-paris-saclay.fr
+Gif-sur-Yvette, le 6 février 2026
+1 Objectifs pédagogiques
+CeTPapourobjectifd’introduirelesétudiantsàlarésolutiondeproblèmesdeplanificationdetrajectoire
+en environnement discret. À travers la modélisation d’un labyrinthe et l’implémentation des algorithmes
+Dijkstra et A*, les étudiants apprendront à représenter un environnement sous forme de grille 2D, à gérer
+descontraintesdedéplacementetàcalculeruncheminoptimalentreunpointdedépartetunpointd’arrivée.
+2 Pré-requis et consignes
+— Langage : Python 3
+— Travail : binôme (sauf indication contraire).
+— Le code doit être propre, commenté, et testable.
+3 Algorithme Dijkstra
+L’algorithmedeDijkstraestunalgorithmegloutonpermettantdecalculerlespluscourtscheminsàpartir
+d’un sommet source vers tous les autres sommets d’un graphe pondéré dont les poids des arêtes sont non
+négatifs.Àchaqueétape,l’algorithmesélectionnelesommetayantladistanceprovisoireminimale,puismet
+à jour (relaxe) les distances de ses voisins. En répétant ce processus, il garantit l’obtention des plus courts
+chemins optimaux. Le pseudocode de l’algorithme de Dijkstra est donné dans l’Algorithme 1.
+1
+Algorithme 1 : Algorithme Dijkstra.
+Input :Graph G= (V, E), source s
+Output : Arrays dist [·],prev [·]
+1Function Dijkstra( G, s):
+2 foreach v∈Vdo
+3 dist [v]←∞
+4 prev [v]←UNDEFINED
+5 Q←V;
+6 dist [s]←0;
+7 while Q̸=∅do
+8 u←arg min
+x∈Qdist [x];
+9 Q←Q\{u};
+10 foreach (u, v)∈Edo
+11 alt←dist [u] +w(u, v);
+12 ifalt<dist [v]then
+13 dist [v]←alt;
+14 prev [v]←u;
+15 return dist [·],prev [·];
+4 Algorithme A*
+L’algorithme A* est un algorithme de recherche de chemin largement utilisé en robotique mobile, en
+intelligence artificielle et en planification de trajectoire. Il permet de trouver un chemin optimal entre un
+point de départ et un point d’arrivée dans un environnement discret ou continu, tout en limitant le nombre
+denœudsexplorés.A*peutêtrevucommeuneextensioninforméedel’algorithmedeDijkstra,danslaquelle
+une heuristique guide la recherche vers la cible.
+LeprincipefondamentaldeA*reposesurl’évaluationdechaquepositioncandidateàl’aided’unefonc-
+tion de coût
+f(n) =g(n) +h(n) (1)
+Leterme g(n)représentelecoûtréelduchemindepuislepointdedépartjusqu’aunœud,tandisque h(n)est
+uneestimationducoûtrestantpour atteindrel’objectif.Dansunlabyrinthereprésentésousformedegrille,
+deux distances sont principalement employées : la distance de Manhattan et la distance euclidienne.
+— La distance de Manhattan correspond au nombre minimal de déplacements nécessaires lorsque seuls
+les mouvements horizontaux et verticaux sont autorisés. Pour une cellule (x, y)et la cellule d’arrivé
+(xg, yg), elle est dénifie par
+hManhattan (x, y) =|x−xg|+|y−yg| (2)
+Cetteheuristiqueestparticulièrementadaptéeauxgrillesàvoisinage4-connectéetnesurestimejamais
+le coût réel pour atteindre l’objectif.
+— La distance euclidienne représente la distance géométrique directe entre deux cellules et est donnée
+par
+hEuclidienne (x, y) =/radicalig
+(x−xg)2+ (y−yg)2 (3)
+Elleestplusappropriéelorsquedesdéplacementsdiagonauxoucontinussontautorisés,maisfournit
+une estimation moins précise dans le cas d’une grille strictement 4-connectée.
+Le pseudocode de l’algorithme de A* est donné dans l’Algorithme 2
+Algorithme 2 : Algorithme A*.
+Input :Graph G= (V, E), start s, goal t, heuristic h(·)
+Output : Shortest path (via prev [·]) and cost g[t](if reachable)
+1Function AStar( G, s, t, h ):
+2 foreach v∈Vdo
+3 g[v]←∞
+4 prev [v]←UNDEFINED
+5 g[s]←0
+6 Q←{s} // open set
+7 while Q̸=∅do
+8 u←arg min
+x∈Q/parenleftbig
+g[x] +h(x)/parenrightbig
+9 ifu=tthen
+10 return g[t],prev [·]
+11 Q←Q\{u}
+12 foreach (u, v)∈Edo
+13 alt←g[u] +w(u, v)
+14 ifalt<g[v]then
+15 g[v]←alt
+16 prev [v]←u
+17 ifv /∈Qthen
+18 Q←Q∪{v}
+19 return∞,prev [·] // goal unreachable
+Dans ce TP, les déplacements étant limités aux quatre directions principales, la distance de Manhattan
+sera utilisée comme heuristique pour l’algorithme A*, afin de guider efficacement la recherche tout en ga-
+rantissant l’obtention d’un chemin optimal.
+5 Représentation du labyrinthe (maze)
+Le labyrinthe est représenté par une grille bidimensionnelle de taille H×W. Chaque cellule de la grille
+correspond à une position potentielle du robot. Une cellule peut être soit franchissable, soit bloquée par un
+obstacle. Vous pouvez choisir un encodage simple, par exemple :
+— 0 : cellule libre (movable area)
+— 1 : obstacle (mur / non franchissable)
+La reward map est une matrice séparée (même taille) :
+— reward négative pour encourager les chemins courts (ex : −1par pas)
+— reward positive pour certains bonus (ex : +5)
+— reward finale à l’arrivée (ex : +100)
+6 Travail demandé
+Partie A : Écrire la classe Maze
+Uneclasse Mazedevraêtreimplémenterpermettantdecréeretdemanipulerunlabyrinthedetaillearbi-
+traire.Cetteclassedevrastockerlesdimensionsdulabyrinthe,lagrillereprésentantlesobstacles,lamatrice
+de récompense, ainsi que les coordonnées du point de départ et du point d’arrivée.
+La classe devra également fournir des méthodes permettant de vérifier si une cellule appartient bien à
+la grille, si elle est franchissable, et d’identifier les cellules voisines accessibles depuis une position donnée.
+Dans ce TP, on considérera un voisinage à quatre directions, correspondant aux déplacements vers le haut,
+le bas, la gauche et la droite.
+Partie B : Fonctions de génération (movable areas, obstacles, reward)
+Des fonctions devront être écrites afin de générer les zones franchissables et les obstacles du labyrinthe.
+Les obstacles pourront être placés de manière aléatoire ou déterministe, mais les cellules correspondant au
+point de départ et au point d’arrivée devront impérativement rester franchissables.
+La matrice de récompense devra être initialisée de manière cohérente. Un choix classique consiste à ap-
+pliquerunepénalitéuniformeàchaquedéplacement,parexempleunevaleurnégativeconstante,afind’en-
+couragerlescheminscourts.Desbonuspeuventêtreajoutéssurcertainescellules,etunerécompensesigni-
+ficative devra être définie pour la cellule d’arrivée.
+Partie C : Résolution avec A* : solve ()
+Une méthode solve ()devra être implémentée dans la classe Maze. Cette méthode devra retourner la
+liste ordonnée des cellules constituant le chemin optimal entre le point de départ et le point d’arrivée. Si
+aucun chemin n’existe, la méthode devra retourner None. L’algorithme devra utiliser une file de priorité
+pour gérer les cellules à explorer, mémoriser les meilleurs coûts trouvés et reconstruire le chemin final à
+partir des relations de parenté entre cellules.
+7 Travaux et Questions
+1. Testerun labyrinthesansobstacle, unlabyrinthecomportantdes obstaclessimples,ainsi qu’uncasoù
+aucun chemin n’est possible. Il faudra également vérifier que les contraintes sur les cellules de départ
+et d’arrivée sont toujours respectées.
+2. Enextension,lesétudiantspourrontproposerl’ajoutdedéplacementsdiagonauxavecuncoûtadapté,
+une visualisation graphique du labyrinthe et du chemin.
+3. Faire une comparaison entre Dijkstra et A*.
+4. Testez les deux algorithmes avec des poids négatifs. Commentez les résultats.
+5. Quelles sont les différences entre les deux algorithmes? Lequel est le plus performant? Quelle est la
+complexité de chacun des deux algorithmes?
+6. Listez les scénarios dans lesquels A* ne peut pas faire mieux que Dijkstra. Dans quel cas A* devient-il
+strictement équivalent à Dijkstra?
+7. Si l’heuristique h(n)est parfaite(c’est-à-dire exactementégale aucoût réelrestant), combiende som-
+mets A* explore-t-il?
+Références
+1. DeKai.Lecture10:Dijkstra’sShortestPathAlgorithm.HongKongUniversityofScienceandTechno-
+logy (HKUST). [Online]. Available : https ://www.cse.ust.hk/~dekai/271/notes/L10/L10.pdf
+2. Siyang Chen. The A* Search Algorithm. [Online]. Available :
+https ://courses.cs.duke.edu/fall11/cps149s/notes/a_star.pdf
